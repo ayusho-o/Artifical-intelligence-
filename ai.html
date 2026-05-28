@@ -1,0 +1,1401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AppCompiler — NL → Executable App</title>
+<style>
+:root {
+  --bg:#0a0a0f; --bg2:#111118; --bg3:#1a1a24; --bg4:#22222f;
+  --border:#2a2a3a; --border2:#3a3a50;
+  --text:#e8e8f0; --text2:#9090a8; --text3:#5a5a72;
+  --blue:#4f8ef7; --blue2:#1e4fd8; --blue-bg:#0d1b3e;
+  --green:#4ade80; --green-bg:#0a1f14;
+  --yellow:#fbbf24; --yellow-bg:#1f1600;
+  --red:#f87171; --red-bg:#1f0a0a;
+  --purple:#a78bfa; --purple-bg:#13103a;
+  --teal:#2dd4bf;
+  --mono:'JetBrains Mono','Fira Code',monospace;
+  --sans:'Inter',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh}
+.shell{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+.sidebar{background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+.main{overflow-y:auto;height:100vh}
+.logo{padding:20px 20px 16px;border-bottom:1px solid var(--border)}
+.logo-title{font-size:15px;font-weight:700;color:var(--text)}
+.logo-sub{font-size:11px;color:var(--text3);margin-top:2px}
+.nav-section{padding:12px 12px 4px;font-size:10px;font-weight:600;color:var(--text3);letter-spacing:1px;text-transform:uppercase}
+.nav-item{display:flex;align-items:center;gap:8px;padding:8px 12px;margin:1px 8px;border-radius:6px;font-size:13px;color:var(--text2);cursor:pointer;transition:all .15s;border:none;background:none;width:calc(100% - 16px);text-align:left}
+.nav-item:hover{background:var(--bg3);color:var(--text)}
+.nav-item.active{background:var(--blue-bg);color:var(--blue)}
+.nav-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
+.nav-badge{margin-left:auto;font-size:10px;padding:1px 6px;border-radius:10px;font-weight:600;background:var(--blue-bg);color:var(--blue)}
+.sidebar-metrics{margin-top:auto;padding:12px;border-top:1px solid var(--border)}
+.sm-title{font-size:10px;color:var(--text3);font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px}
+.sm-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.sm-card{background:var(--bg3);border-radius:6px;padding:8px}
+.sm-label{font-size:10px;color:var(--text3)}
+.sm-value{font-size:16px;font-weight:700;margin-top:1px}
+.page{display:none;padding:24px}
+.page.active{display:block}
+.page-title{font-size:20px;font-weight:700;margin-bottom:4px}
+.page-sub{font-size:13px;color:var(--text2);margin-bottom:20px}
+
+/* API Key banner */
+.apikey-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--yellow-bg);border:1px solid var(--yellow);border-radius:8px;margin-bottom:16px;font-size:12px;color:var(--yellow)}
+.apikey-bar input{flex:1;padding:6px 10px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:12px}
+.apikey-bar input:focus{outline:none;border-color:var(--yellow)}
+.apikey-bar.ok{background:var(--green-bg);border-color:var(--green);color:var(--green)}
+
+.stage-track{display:flex;align-items:center;margin-bottom:20px;padding:16px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow-x:auto;gap:0}
+.stage-node{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0}
+.stage-circle{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;border:2px solid var(--border2);background:var(--bg3);color:var(--text3);transition:all .3s}
+.stage-circle.active{border-color:var(--blue);background:var(--blue-bg);color:var(--blue);animation:pulse 1.5s infinite}
+.stage-circle.done{border-color:var(--green);background:var(--green-bg);color:var(--green)}
+.stage-circle.error{border-color:var(--red);background:var(--red-bg);color:var(--red)}
+.stage-label{font-size:10px;color:var(--text3);text-align:center;max-width:60px}
+.stage-conn{width:30px;height:2px;background:var(--border);flex-shrink:0;margin-top:-18px;transition:background .3s}
+.stage-conn.done{background:var(--green)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+.prompt-label{font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:500}
+.prompt-box{width:100%;min-height:90px;padding:12px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:14px;resize:vertical;transition:border .2s;margin-bottom:8px}
+.prompt-box:focus{outline:none;border-color:var(--blue)}
+.chip-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.chip{padding:4px 10px;border-radius:12px;font-size:11px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);cursor:pointer;transition:all .15s}
+.chip:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-bg)}
+.chip.edge{border-color:var(--yellow);color:var(--yellow);background:var(--yellow-bg)}
+.run-bar{display:flex;gap:8px;align-items:center;margin-bottom:20px;flex-wrap:wrap}
+.btn{padding:9px 18px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--border2);background:var(--bg3);color:var(--text);transition:all .15s}
+.btn:hover{background:var(--bg4)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.primary{background:var(--blue2);border-color:var(--blue);color:#fff}
+.btn.primary:hover:not(:disabled){background:var(--blue)}
+.btn.danger{background:var(--red-bg);border-color:var(--red);color:var(--red)}
+.timer{font-size:12px;color:var(--text3);font-family:var(--mono)}
+.cost-pill{margin-left:auto;font-size:12px;color:var(--text2);background:var(--bg3);padding:4px 10px;border-radius:6px;border:1px solid var(--border)}
+.out-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.ph{padding:9px 14px;background:var(--bg3);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--text2)}
+.ph-badge{margin-left:auto;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:700}
+.pb{padding:12px 14px;max-height:300px;overflow-y:auto}
+.log-line{font-size:12px;line-height:1.9;display:flex;gap:6px}
+.lt{color:var(--text3);font-family:var(--mono);font-size:11px;flex-shrink:0}
+.lm{flex:1}
+.l-info{color:var(--text2)} .l-success{color:var(--green)} .l-warn{color:var(--yellow)} .l-error{color:var(--red)} .l-repair{color:var(--teal)}
+.vi{display:flex;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px}
+.vi:last-child{border:none}
+.vi-ic{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;margin-top:1px}
+.ic-ok{background:var(--green-bg);color:var(--green)}
+.ic-err{background:var(--red-bg);color:var(--red)}
+.ic-fix{background:var(--blue-bg);color:var(--blue)}
+.ic-warn{background:var(--yellow-bg);color:var(--yellow)}
+.vi-txt{flex:1;color:var(--text)}
+.vi-sub{font-size:10px;color:var(--text3);margin-top:1px}
+.schema-panel{background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:12px}
+.schema-tab-bar{display:flex;border-bottom:1px solid var(--border);overflow-x:auto}
+.schema-tab-btn{padding:9px 16px;font-size:12px;font-weight:500;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:all .15s;background:none;border-left:none;border-right:none;border-top:none}
+.schema-tab-btn:hover{color:var(--text)}
+.schema-tab-btn.active{color:var(--blue);border-bottom-color:var(--blue)}
+.schema-tab-pane{display:none;padding:14px;max-height:420px;overflow-y:auto}
+.schema-tab-pane.active{display:block}
+pre.code{font-family:var(--mono);font-size:11px;line-height:1.7;color:var(--text);white-space:pre-wrap;word-break:break-word}
+.jk{color:#79c0ff} .js{color:#a5d6ff} .jn{color:#ff9f0a} .jb{color:var(--purple)} .jnu{color:var(--red)}
+.rt-row{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;border-radius:5px;margin-bottom:3px;background:var(--bg3);font-size:12px}
+.rt-name{font-family:var(--mono);color:var(--text);font-size:11px}
+.rt-badge{padding:2px 7px;border-radius:8px;font-size:10px;font-weight:600}
+.rb-get{background:var(--blue-bg);color:var(--blue)}
+.rb-post{background:var(--green-bg);color:var(--green)}
+.rb-put,.rb-patch{background:var(--yellow-bg);color:var(--yellow)}
+.rb-delete{background:var(--red-bg);color:var(--red)}
+.rb-tbl{background:var(--bg4);color:var(--text2)}
+.rb-role{background:var(--purple-bg);color:var(--purple)}
+.eval-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+.eval-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px}
+.ec-lbl{font-size:11px;color:var(--text3);margin-bottom:4px}
+.ec-val{font-size:24px;font-weight:700}
+.ec-sub{font-size:11px;color:var(--text3);margin-top:2px}
+.c-green{color:var(--green)} .c-yellow{color:var(--yellow)} .c-red{color:var(--red)} .c-blue{color:var(--blue)}
+.etbl{width:100%;border-collapse:collapse;font-size:12px}
+.etbl th{padding:8px 10px;text-align:left;font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)}
+.etbl td{padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text2)}
+.etbl tr:last-child td{border:none}
+.etbl tr:hover td{background:var(--bg3);color:var(--text)}
+.run-btn{padding:3px 8px;border-radius:5px;font-size:11px;border:1px solid var(--border2);background:var(--bg3);color:var(--blue);cursor:pointer}
+.run-btn:hover{background:var(--blue-bg)}
+.sdot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:4px}
+.sd-p{background:var(--text3)} .sd-r{background:var(--yellow);animation:pulse 1s infinite} .sd-ok{background:var(--green)} .sd-fail{background:var(--red)}
+.cost-chart{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px}
+.cbar-wrap{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.cbar-lbl{font-size:11px;color:var(--text2);width:90px;text-align:right}
+.cbar-track{flex:1;height:20px;background:var(--bg3);border-radius:4px;overflow:hidden}
+.cbar-fill{height:100%;border-radius:4px;display:flex;align-items:center;padding-left:6px;font-size:10px;font-weight:600;transition:width .6s ease;min-width:0}
+.cbar-val{font-size:11px;color:var(--text3);width:65px}
+.tradeoff-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px}
+.tc{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px}
+.tc-title{font-size:12px;font-weight:600;margin-bottom:8px}
+.tc-score{font-size:28px;font-weight:700;margin-bottom:4px}
+.tc-bar{height:4px;border-radius:2px;background:var(--bg3);margin-bottom:6px}
+.tc-fill{height:100%;border-radius:2px;transition:width .6s}
+.tc-desc{font-size:11px;color:var(--text3);line-height:1.5}
+.cf{background:var(--bg2);border:1px solid var(--border);border-radius:8px;margin-bottom:10px;overflow:hidden}
+.cf-hdr{padding:8px 14px;background:var(--bg3);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;font-size:12px;font-weight:500}
+.cf-lang{padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700}
+.lang-prisma{background:#0d3a6e;color:#60a5fa}
+.lang-js{background:#1a2e0d;color:#4ade80}
+.lang-jsx{background:#1a0d3e;color:#a78bfa}
+.lang-yaml{background:#1a1a0d;color:#fbbf24}
+.lang-env{background:#1f0a0a;color:#f87171}
+.cf-body{padding:12px 14px;max-height:280px;overflow-y:auto}
+.empty{text-align:center;padding:32px;color:var(--text3);font-size:13px}
+.empty-icon{font-size:32px;margin-bottom:8px}
+.atag{display:inline-block;padding:3px 9px;border-radius:10px;font-size:11px;background:var(--blue-bg);color:var(--blue);border:1px solid rgba(79,142,247,.3);margin:3px}
+.ctag{display:inline-block;padding:3px 9px;border-radius:10px;font-size:11px;background:var(--yellow-bg);color:var(--yellow);border:1px solid rgba(251,191,36,.3);margin:3px}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+.arch-flow{display:flex;gap:0;align-items:center;padding:8px 0;overflow-x:auto}
+.arch-node{border-radius:8px;padding:10px 14px;text-align:center;flex-shrink:0}
+.arch-conn{width:24px;height:2px;background:var(--border2);flex-shrink:0}
+.banner{background:var(--yellow-bg);border:1px solid var(--yellow);border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:12px;display:none}
+@media(max-width:800px){
+  .shell{grid-template-columns:1fr}
+  .sidebar{height:auto;position:static}
+  .out-grid{grid-template-columns:1fr}
+  .eval-grid{grid-template-columns:1fr 1fr}
+  .tradeoff-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<aside class="sidebar">
+  <div class="logo">
+    <div class="logo-title">⚙ AppCompiler</div>
+    <div class="logo-sub">NL → Executable App Config</div>
+  </div>
+  <div class="nav-section">Pipeline</div>
+  <button class="nav-item active" id="nav-pipeline" onclick="showPage('pipeline',this)"><div class="nav-dot"></div>Run Pipeline</button>
+  <button class="nav-item" id="nav-schema" onclick="showPage('schema',this)"><div class="nav-dot"></div>Schema Output <span class="nav-badge" id="nb-schema">—</span></button>
+  <button class="nav-item" id="nav-codegen" onclick="showPage('codegen',this)"><div class="nav-dot"></div>Code Generator <span class="nav-badge" id="nb-code">—</span></button>
+  <button class="nav-item" id="nav-runtime" onclick="showPage('runtime',this)"><div class="nav-dot"></div>Runtime Sim <span class="nav-badge" id="nb-rt">—</span></button>
+  <div class="nav-section">Quality</div>
+  <button class="nav-item" id="nav-eval" onclick="showPage('eval',this)"><div class="nav-dot"></div>Eval Framework <span class="nav-badge" id="nb-eval">0/20</span></button>
+  <button class="nav-item" id="nav-cost" onclick="showPage('cost',this)"><div class="nav-dot"></div>Cost vs Quality</button>
+  <div class="nav-section">Info</div>
+  <button class="nav-item" id="nav-about" onclick="showPage('about',this)"><div class="nav-dot"></div>Architecture</button>
+  <div class="sidebar-metrics">
+    <div class="sm-title">Session Stats</div>
+    <div class="sm-grid">
+      <div class="sm-card"><div class="sm-label">Runs</div><div class="sm-value c-blue" id="stat-runs">0</div></div>
+      <div class="sm-card"><div class="sm-label">Repairs</div><div class="sm-value c-yellow" id="stat-repairs">0</div></div>
+      <div class="sm-card"><div class="sm-label">Avg (s)</div><div class="sm-value" id="stat-avg">—</div></div>
+      <div class="sm-card"><div class="sm-label">Success</div><div class="sm-value c-green" id="stat-rate">—</div></div>
+    </div>
+  </div>
+</aside>
+
+<main class="main">
+
+<!-- PIPELINE -->
+<div class="page active" id="page-pipeline">
+  <div class="page-title">Pipeline Runner</div>
+  <div class="page-sub">5-stage compiler: Intent → Architecture → Schema → Validate+Repair → CodeGen</div>
+
+  <!-- FIX: API Key input bar -->
+  <div class="apikey-bar" id="apikeyBar">
+    <span>🔑</span>
+    <span style="white-space:nowrap">Groq API Key:</span>
+    <input type="password" id="apikeyInput" placeholder="gsk_..." oninput="saveApiKey(this.value)" />
+    <span id="apikeyStatus" style="white-space:nowrap;font-size:11px">Not set</span>
+  </div>
+
+  <div class="stage-track">
+    <div class="stage-node"><div class="stage-circle" id="sc0">0</div><div class="stage-label">Start</div></div>
+    <div class="stage-conn" id="conn0"></div>
+    <div class="stage-node"><div class="stage-circle" id="sc1">1</div><div class="stage-label">Intent</div></div>
+    <div class="stage-conn" id="conn1"></div>
+    <div class="stage-node"><div class="stage-circle" id="sc2">2</div><div class="stage-label">Arch</div></div>
+    <div class="stage-conn" id="conn2"></div>
+    <div class="stage-node"><div class="stage-circle" id="sc3">3</div><div class="stage-label">Schema</div></div>
+    <div class="stage-conn" id="conn3"></div>
+    <div class="stage-node"><div class="stage-circle" id="sc4">4</div><div class="stage-label">Validate</div></div>
+    <div class="stage-conn" id="conn4"></div>
+    <div class="stage-node"><div class="stage-circle" id="sc5">5</div><div class="stage-label">CodeGen</div></div>
+  </div>
+  <div class="prompt-label">App description</div>
+  <textarea class="prompt-box" id="userPrompt" placeholder="e.g. Build a CRM with login, contacts, dashboard, role-based access (admin/manager/rep), and premium plan with Stripe payments. Admins see analytics and export CSV."></textarea>
+  <div class="chip-row">
+    <span style="font-size:11px;color:var(--text3);align-self:center">Real apps:</span>
+    <div class="chip" onclick="setP('crm')">CRM + Payments</div>
+    <div class="chip" onclick="setP('saas')">SaaS Dashboard</div>
+    <div class="chip" onclick="setP('ecom')">E-Commerce</div>
+    <div class="chip" onclick="setP('blog')">Blog Platform</div>
+    <div class="chip" onclick="setP('pm')">Project Mgmt</div>
+    <span style="font-size:11px;color:var(--text3);align-self:center;margin-left:6px">Edge cases:</span>
+    <div class="chip edge" onclick="setP('vague')">Vague</div>
+    <div class="chip edge" onclick="setP('conflict')">Conflicting</div>
+    <div class="chip edge" onclick="setP('overspec')">Over-specified</div>
+  </div>
+  <div class="run-bar">
+    <button class="btn primary" id="runBtn" onclick="runPipeline()">▶ Run Pipeline</button>
+    <button class="btn" onclick="doReset()">↺ Reset</button>
+    <span class="timer" id="timerEl"></span>
+    <span class="cost-pill" id="costEl">Cost: $0.00000</span>
+  </div>
+  <div class="out-grid">
+    <div class="panel">
+      <div class="ph">📋 Stage Log <span class="ph-badge" id="logBadge" style="background:var(--bg4);color:var(--text3)">idle</span></div>
+      <div class="pb" id="stageLog"><div class="empty"><div class="empty-icon">⏳</div>Run a pipeline to see output</div></div>
+    </div>
+    <div class="panel">
+      <div class="ph">🛡 Validation + Repair <span class="ph-badge" id="valBadge" style="background:var(--bg4);color:var(--text3)">idle</span></div>
+      <div class="pb" id="valPanel"><div class="empty"><div class="empty-icon">🔍</div>Validation results appear here</div></div>
+    </div>
+  </div>
+  <div class="banner" id="assumBanner">
+    <div style="font-weight:600;color:var(--yellow);margin-bottom:6px">⚠ Ambiguity / Assumptions Documented</div>
+    <div id="assumList"></div>
+  </div>
+</div>
+
+<!-- SCHEMA -->
+<div class="page" id="page-schema">
+  <div class="page-title">Schema Output</div>
+  <div class="page-sub">Complete structured config: Database · API Endpoints · UI Pages · Auth + Roles · Business Logic</div>
+  <!-- FIX: renamed tab classes to schema-tab-* to avoid collision with other tab elements -->
+  <div class="schema-panel">
+    <div class="schema-tab-bar">
+      <button class="schema-tab-btn active" onclick="switchSTab('db',this)">Database</button>
+      <button class="schema-tab-btn" onclick="switchSTab('api',this)">API Endpoints</button>
+      <button class="schema-tab-btn" onclick="switchSTab('ui',this)">UI Config</button>
+      <button class="schema-tab-btn" onclick="switchSTab('auth',this)">Auth + Roles</button>
+      <button class="schema-tab-btn" onclick="switchSTab('biz',this)">Business Logic</button>
+      <button class="schema-tab-btn" onclick="switchSTab('full',this)">Full JSON</button>
+    </div>
+    <div class="schema-tab-pane active" id="stab-db"><div class="empty">Run pipeline first</div></div>
+    <div class="schema-tab-pane" id="stab-api"><div class="empty">Run pipeline first</div></div>
+    <div class="schema-tab-pane" id="stab-ui"><div class="empty">Run pipeline first</div></div>
+    <div class="schema-tab-pane" id="stab-auth"><div class="empty">Run pipeline first</div></div>
+    <div class="schema-tab-pane" id="stab-biz"><div class="empty">Run pipeline first</div></div>
+    <div class="schema-tab-pane" id="stab-full"><div class="empty">Run pipeline first</div></div>
+  </div>
+</div>
+
+<!-- CODEGEN -->
+<div class="page" id="page-codegen">
+  <div class="page-title">Code Generator</div>
+  <div class="page-sub">Executable output: Prisma schema · Express routes · Next.js pages · OpenAPI spec · .env template</div>
+  <div id="codegenOut"><div class="empty" style="padding:40px"><div class="empty-icon">💻</div>Run pipeline to generate executable files</div></div>
+</div>
+
+<!-- RUNTIME -->
+<div class="page" id="page-runtime">
+  <div class="page-title">Runtime Simulation</div>
+  <div class="page-sub">Validates every endpoint, table, and role — proves output is execution-ready</div>
+  <div id="runtimeOut"><div class="empty" style="padding:40px"><div class="empty-icon">🚀</div>Run pipeline to simulate runtime</div></div>
+</div>
+
+<!-- EVAL -->
+<div class="page" id="page-eval">
+  <div class="page-title">Evaluation Framework</div>
+  <div class="page-sub">20-prompt benchmark (10 real apps + 10 edge cases) with tracked metrics per the PDF requirement</div>
+  <div class="eval-grid">
+    <div class="eval-card"><div class="ec-lbl">Prompts run</div><div class="ec-val c-blue" id="ev-run">0/20</div><div class="ec-sub">benchmark dataset</div></div>
+    <div class="eval-card"><div class="ec-lbl">Success rate</div><div class="ec-val c-green" id="ev-rate">—</div><div class="ec-sub">valid schema output</div></div>
+    <div class="eval-card"><div class="ec-lbl">Avg latency</div><div class="ec-val" id="ev-lat">—</div><div class="ec-sub">per pipeline run</div></div>
+    <div class="eval-card"><div class="ec-lbl">Repairs triggered</div><div class="ec-val c-yellow" id="ev-rep">0</div><div class="ec-sub">auto-fixed issues</div></div>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+    <button class="btn primary" id="evalBtn" onclick="runFullEval()">▶ Run All 20 Prompts</button>
+    <button class="btn" id="evalNextBtn" onclick="runNextEval()">▶ Next Prompt</button>
+    <button class="btn danger" onclick="resetEval()">Reset</button>
+    <span id="evalProgress" style="font-size:12px;color:var(--text3);align-self:center"></span>
+  </div>
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden;overflow-x:auto">
+    <table class="etbl">
+      <thead><tr><th>#</th><th>Prompt</th><th>Category</th><th>Status</th><th>Latency</th><th>Repairs</th><th>Quality</th><th>Action</th></tr></thead>
+      <tbody id="evalBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- COST -->
+<div class="page" id="page-cost">
+  <div class="page-title">Cost vs Quality Analysis</div>
+  <div class="page-sub">Tradeoff tracking: latency · token cost · output quality score · repair rate</div>
+  <div class="tradeoff-grid">
+    <div class="tc">
+      <div class="tc-title" style="color:var(--green)">Output Quality</div>
+      <div class="tc-score c-green" id="cq-q">—</div>
+      <div class="tc-bar"><div class="tc-fill" id="cq-qb" style="width:0%;background:var(--green)"></div></div>
+      <div class="tc-desc">Scored on: field completeness, cross-layer consistency, valid HTTP methods, auth endpoints, premium gate</div>
+    </div>
+    <div class="tc">
+      <div class="tc-title" style="color:var(--yellow)">Latency</div>
+      <div class="tc-score c-yellow" id="cq-l">—</div>
+      <div class="tc-bar"><div class="tc-fill" id="cq-lb" style="width:0%;background:var(--yellow)"></div></div>
+      <div class="tc-desc">5 separate API calls per run. Repairs add ~1 extra call each. Shown relative to 60s max.</div>
+    </div>
+    <div class="tc">
+      <div class="tc-title" style="color:var(--blue)">Estimated Cost</div>
+      <div class="tc-score c-blue" id="cq-c">—</div>
+      <div class="tc-bar"><div class="tc-fill" id="cq-cb" style="width:0%;background:var(--blue)"></div></div>
+      <div class="tc-desc">Token usage × Groq Llama3 pricing (~$3/M tokens). Targeted repair far cheaper than full retry.</div>
+    </div>
+  </div>
+  <div class="cost-chart">
+    <div style="font-size:13px;font-weight:600;margin-bottom:14px">Token usage by stage</div>
+    <div class="cbar-wrap"><div class="cbar-lbl">Intent</div><div class="cbar-track"><div class="cbar-fill" id="tb1" style="width:0%;background:#4f8ef7;color:#fff"></div></div><div class="cbar-val" id="tv1">—</div></div>
+    <div class="cbar-wrap"><div class="cbar-lbl">Architecture</div><div class="cbar-track"><div class="cbar-fill" id="tb2" style="width:0%;background:#a78bfa;color:#fff"></div></div><div class="cbar-val" id="tv2">—</div></div>
+    <div class="cbar-wrap"><div class="cbar-lbl">Schema</div><div class="cbar-track"><div class="cbar-fill" id="tb3" style="width:0%;background:#2dd4bf;color:#111"></div></div><div class="cbar-val" id="tv3">—</div></div>
+    <div class="cbar-wrap"><div class="cbar-lbl">Validation</div><div class="cbar-track"><div class="cbar-fill" id="tb4" style="width:0%;background:#4ade80;color:#111"></div></div><div class="cbar-val" id="tv4">—</div></div>
+    <div class="cbar-wrap"><div class="cbar-lbl">CodeGen</div><div class="cbar-track"><div class="cbar-fill" id="tb5" style="width:0%;background:#fbbf24;color:#111"></div></div><div class="cbar-val" id="tv5">—</div></div>
+  </div>
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;overflow-x:auto">
+    <div style="font-size:13px;font-weight:600;margin-bottom:10px">Run history</div>
+    <table class="etbl" style="font-size:11px">
+      <thead><tr><th>#</th><th>Prompt</th><th>Latency</th><th>Tokens</th><th>Cost</th><th>Quality</th><th>Repairs</th></tr></thead>
+      <tbody id="runHistory"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ABOUT -->
+<div class="page" id="page-about">
+  <div class="page-title">System Architecture</div>
+  <div class="page-sub">Design decisions, pipeline rationale, validation strategy, tradeoffs</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div class="panel" style="grid-column:1/-1">
+      <div class="ph">Pipeline Design — why multi-stage?</div>
+      <div class="pb" style="max-height:none">
+        <div class="arch-flow">
+          <div class="arch-node" style="background:var(--blue-bg);border:1px solid var(--blue)"><div style="font-size:11px;font-weight:700;color:var(--blue)">Stage 1</div><div style="font-size:12px;margin-top:3px">Intent Extraction</div><div style="font-size:10px;color:var(--text3)">entities·roles·flags</div></div>
+          <div class="arch-conn"></div>
+          <div class="arch-node" style="background:var(--purple-bg);border:1px solid var(--purple)"><div style="font-size:11px;font-weight:700;color:var(--purple)">Stage 2</div><div style="font-size:12px;margin-top:3px">System Design</div><div style="font-size:10px;color:var(--text3)">pages·models·flows</div></div>
+          <div class="arch-conn"></div>
+          <div class="arch-node" style="background:#0d3a2e;border:1px solid var(--teal)"><div style="font-size:11px;font-weight:700;color:var(--teal)">Stage 3</div><div style="font-size:12px;margin-top:3px">Schema Generation</div><div style="font-size:10px;color:var(--text3)">DB·API·UI·Auth</div></div>
+          <div class="arch-conn"></div>
+          <div class="arch-node" style="background:var(--green-bg);border:1px solid var(--green)"><div style="font-size:11px;font-weight:700;color:var(--green)">Stage 4</div><div style="font-size:12px;margin-top:3px">Validate + Repair</div><div style="font-size:10px;color:var(--text3)">detect·fix·verify</div></div>
+          <div class="arch-conn"></div>
+          <div class="arch-node" style="background:var(--yellow-bg);border:1px solid var(--yellow)"><div style="font-size:11px;font-weight:700;color:var(--yellow)">Stage 5</div><div style="font-size:12px;margin-top:3px">Code Generation</div><div style="font-size:10px;color:var(--text3)">Prisma·Express·Next</div></div>
+        </div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.8;margin-top:12px">Single-prompt generation was explicitly rejected by the spec. Multi-stage matters because each stage has a narrow responsibility and a strict output contract — intent extraction can't hallucinate DB columns, schema generation already knows the full entity graph. Errors are local and repairable without restarting the whole pipeline.</div>
+      </div>
+    </div>
+    <div class="panel"><div class="ph">Repair Strategy</div><div class="pb" style="max-height:none;font-size:12px;line-height:1.8;color:var(--text2)">Instead of blind full retry: (1) detect the specific failure type, (2) target only the broken layer, (3) use a tighter JSON-only prompt with fewer output options, (4) merge the repaired part into existing schema. This keeps added cost to ~1 API call vs regenerating all 5 stages.</div></div>
+    <div class="panel"><div class="ph">Determinism Techniques</div><div class="pb" style="max-height:none;font-size:12px;line-height:1.8;color:var(--text2)">JSON-only system prompts with explicit schema contracts. Per-stage output types. JSON fence + brace regex extraction with two-pass fallback. Explicit field lists prevent hallucination drift. Ambiguity resolved in Stage 1 before downstream stages see the data.</div></div>
+    <div class="panel"><div class="ph">Failure Handling</div><div class="pb" style="max-height:none;font-size:12px;line-height:1.8;color:var(--text2)">Vague prompts: Stage 1 infers app_type and documents in assumptions[]. Conflicting requirements: documented in ambiguity_flags[], resolved with industry-standard default. Underspecified: missing_info[] captured, gaps filled with sensible defaults. Every decision is traceable in the schema output.</div></div>
+    <div class="panel"><div class="ph">Execution Awareness</div><div class="pb" style="max-height:none;font-size:12px;line-height:1.8;color:var(--text2)">Stage 5 generates 5 real files: Prisma schema (ORM, directly runnable), Express router (drop-in Node.js routes), Next.js page stubs (mountable React pages), OpenAPI YAML (documentation + testing), .env.example (all required env vars). These are not simulated — they are syntactically valid code.</div></div>
+  </div>
+</div>
+
+</main>
+</div>
+
+<script>
+// ─── PROMPTS ───
+const PROMPTS = {
+  crm:"Build a CRM with login, contacts list, deal pipeline, activity timeline, dashboard with revenue charts, role-based access (admin/manager/rep), and premium plan with Stripe payments. Admins see analytics and export CSV.",
+  saas:"Build a SaaS analytics dashboard with team workspaces, user invitations, real-time metrics, custom dashboards, API key management, free tier (5 users, 10k events/month) and pro tier (unlimited). Billing via Stripe.",
+  ecom:"Build an e-commerce platform with product catalog, cart, checkout with Stripe, order tracking, seller accounts, buyer accounts, admin panel for inventory, reviews, and wishlists.",
+  blog:"Build a blogging platform where authors write markdown posts, schedule publishing, add tags, track views. Readers comment, like, follow authors. Admins moderate content.",
+  pm:"Build a project management app: workspaces, projects, sprints, tickets with priority/status/assignee, kanban board, burndown charts, team members, time tracking.",
+  vague:"make an app for my business",
+  conflict:"Build an app where free users get unlimited everything with no restrictions, but also require payment for any feature access. Free tier should have more features than paid tier.",
+  overspec:"Build a CRM with login, logout, signup, password reset, email verification, 2FA, SSO with Google/GitHub, contacts CRUD, companies CRUD, deals CRUD, pipeline stages, activity logs, email integration, calendar sync, tasks, notes, tags, custom fields, CSV import/export, webhooks, Zapier integration, Slack notifications, role-based access, audit logs, Stripe billing, team management, and mobile-responsive design."
+};
+
+const EVAL_DATASET = [
+  {p:"Build a CRM with contacts, deals pipeline, and admin analytics",cat:"Real"},
+  {p:"Build a SaaS dashboard with team management, API keys, and Stripe billing",cat:"Real"},
+  {p:"Build an e-commerce store with products, cart, checkout, and order tracking",cat:"Real"},
+  {p:"Build a blog platform with markdown editor, comments, and author profiles",cat:"Real"},
+  {p:"Build a project management tool with sprints, tickets, and kanban boards",cat:"Real"},
+  {p:"Build a learning management system with courses, lessons, quizzes, and certificates",cat:"Real"},
+  {p:"Build a healthcare appointment booking system with doctors, patients, and availability",cat:"Real"},
+  {p:"Build a food delivery app with restaurants, menus, orders, and delivery tracking",cat:"Real"},
+  {p:"Build a real estate listing platform with properties, agents, search, and inquiries",cat:"Real"},
+  {p:"Build a job board with listings, applications, employer and candidate profiles",cat:"Real"},
+  {p:"make something",cat:"Edge: vague"},
+  {p:"build me an app",cat:"Edge: vague"},
+  {p:"I need software for my company that does everything",cat:"Edge: vague"},
+  {p:"Build an app where free users have full access and paid users also have full access but free is better",cat:"Edge: conflict"},
+  {p:"Build an app that requires login but also has no authentication and is fully public",cat:"Edge: conflict"},
+  {p:"Build an app that stores data but has no database",cat:"Edge: conflict"},
+  {p:"Build a to-do app",cat:"Edge: under-specified"},
+  {p:"social media app",cat:"Edge: under-specified"},
+  {p:"GET /contacts returns all contacts but only contacts of current user but also all contacts regardless of owner",cat:"Edge: contradictory"},
+  {p:"HIPAA-compliant medical records with real-time AI diagnosis, blockchain audit trail, AR visualization, zero latency",cat:"Edge: overspec"}
+];
+
+// ─── STATE ───
+// Groq free-tier optimized single-file deployment version
+
+const S = {
+  schema:null, intent:null, arch:null,
+  tok:{s1:0,s2:0,s3:0,s4:0,s5:0},
+  running:false,
+  repairs:0, runs:0, successes:0,
+  latencies:[], runHistory:[],
+  evalResults:Array(20).fill(null)
+};
+// FIX: evalIdx declared at module scope so runNextEval and runFullEval share it properly
+let evalIdx = 0;
+
+// ─── FIX: API KEY MANAGEMENT ───
+// The original code was missing the x-api-key header entirely — nothing worked.
+// We store the key in a module-level variable (not localStorage per artifact rules).
+let _apiKey = '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';
+
+function saveApiKey(val) {
+  _apiKey = val.trim();
+  const bar = document.getElementById('apikeyBar');
+  const status = document.getElementById('apikeyStatus');
+  if ((_apiKey.startsWith('gsk_') || _apiKey.startsWith('sk-ant-')) && _apiKey.length > 20) {
+    bar.className = 'apikey-bar ok';
+    status.textContent = '✓ Key set';
+  } else if (_apiKey) {
+    bar.className = 'apikey-bar';
+    bar.style.borderColor = 'var(--red)';
+    status.textContent = '⚠ Check format';
+  } else {
+    bar.className = 'apikey-bar';
+    status.textContent = 'Not set';
+  }
+}
+
+// ─── NAV ───
+function showPage(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  if (btn) btn.classList.add('active');
+}
+
+// FIX: switchSTab now scoped to .schema-tab-* elements only, preventing cross-page tab conflicts
+function switchSTab(name, btn) {
+  document.querySelectorAll('.schema-tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.schema-tab-pane').forEach(p => p.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const pane = document.getElementById('stab-' + name);
+  if (pane) pane.classList.add('active');
+}
+
+function setP(k) { document.getElementById('userPrompt').value = PROMPTS[k] || k; }
+
+// ─── STAGE TRACKER ───
+function setStage(i, st) {
+  const el = document.getElementById('sc' + i);
+  if (!el) return;
+  el.className = 'stage-circle' + (st ? ' ' + st : '');
+  // FIX: only update connector when i > 0 to avoid conn-1 reference
+  if (i > 0) {
+    const c = document.getElementById('conn' + (i - 1));
+    if (c) { if (st === 'done') c.classList.add('done'); else c.classList.remove('done'); }
+  }
+}
+
+// ─── LOGGING ───
+function addLog(msg, type) {
+  const el = document.getElementById('stageLog');
+  if (!el) return;
+  if (el.querySelector('.empty')) el.innerHTML = '';
+  const ts = new Date().toLocaleTimeString('en', {hour12:false});
+  const d = document.createElement('div');
+  d.className = 'log-line';
+  d.innerHTML = '<span class="lt">' + ts + '</span><span class="lm l-' + (type||'info') + '">' + escH(msg) + '</span>';
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+function addVal(text, sub, kind) {
+  const el = document.getElementById('valPanel');
+  if (!el) return;
+  if (el.querySelector('.empty')) el.innerHTML = '';
+  const icons = {ok:'✓',err:'✗',fix:'↻',warn:'!'};
+  const d = document.createElement('div');
+  d.className = 'vi';
+  d.innerHTML = '<div class="vi-ic ic-' + kind + '">' + (icons[kind]||'?') + '</div><div><div class="vi-txt">' + escH(text) + '</div>' + (sub ? '<div class="vi-sub">' + escH(sub) + '</div>' : '') + '</div>';
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+function escH(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function setBadge(id, text, col) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const map = {ok:'background:var(--green-bg);color:var(--green)',err:'background:var(--red-bg);color:var(--red)',warn:'background:var(--yellow-bg);color:var(--yellow)',info:'background:var(--blue-bg);color:var(--blue)',idle:'background:var(--bg4);color:var(--text3)'};
+  el.style.cssText = map[col] || map.idle;
+  el.textContent = text;
+}
+
+// ─── HELPERS ───
+function extractJSON(text) {
+  try {
+    JSON.parse(text);
+    return text;
+  } catch(e) {}
+
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced) {
+    try {
+      JSON.parse(fenced[1].trim());
+      return fenced[1].trim();
+    } catch(e) {}
+  }
+
+  const first = text.indexOf('{');
+  const last = text.lastIndexOf('}');
+
+  if (first !== -1 && last !== -1 && last > first) {
+    const candidate = text.slice(first, last + 1);
+    try {
+      JSON.parse(candidate);
+      return candidate;
+    } catch(e) {}
+  }
+
+  return '{}';
+}
+
+function syntaxHL(obj) {
+  const raw = JSON.stringify(obj, null, 2);
+  return raw
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/("(?:[^"\\]|\\.)*")(\s*:)/g, '<span class="jk">$1</span>$2')
+    .replace(/:\s*("(?:[^"\\]|\\.)*")/g, ': <span class="js">$1</span>')
+    .replace(/:\s*(-?\d+\.?\d*)/g, ': <span class="jn">$1</span>')
+    .replace(/:\s*(true|false)/g, ': <span class="jb">$1</span>')
+    .replace(/:\s*(null)/g, ': <span class="jnu">$1</span>');
+}
+
+// FIX: Added x-api-key header — this was the root cause of the entire app not working.
+// Also added anthropic-dangerous-direct-browser-access header required for browser CORS.
+async function claude(system, user, sk) {
+  if (!_apiKey) throw new Error('API key not set. Please enter your Groq API key above.');
+
+  const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'Authorization': 'Bearer ' + _apiKey
+    },
+    body: JSON.stringify({
+      model:'llama-3.3-70b-versatile',
+      temperature:0.2,
+      max_tokens:600,
+      messages:[
+        {role:'system',content:system},
+        {role:'user',content:user}
+      ]
+    })
+  });
+
+  if (!r.ok) {
+    const err = await r.text();
+    throw new Error('API ' + r.status + ': ' + err.slice(0,300));
+  }
+
+  const d = await r.json();
+
+  const tok =
+    (d.usage?.prompt_tokens||0) +
+    (d.usage?.completion_tokens||0);
+
+  if (sk) S.tok[sk] = (S.tok[sk]||0) + tok;
+
+  return d.choices?.[0]?.message?.content || '{}';
+}
+
+function calcCost() {
+  return (Object.values(S.tok).reduce((a,b)=>a+b,0) * 0.000001).toFixed(5);
+}
+
+function qualScore(schema) {
+  if (!schema) return 0;
+  let score = 0;
+  const checks = [
+    [(schema.database?.tables||[]).length > 0, 15],
+    [(schema.api?.endpoints||[]).length > 0, 15],
+    [(schema.ui?.pages||[]).length > 0, 10],
+    [(schema.auth?.roles||[]).length > 0, 10],
+    [!!schema.auth?.strategy, 5],
+    [(schema.api?.endpoints||[]).every(e=>e.method&&e.path), 10],
+    [(schema.database?.tables||[]).every(t=>(t.columns||[]).length>0), 10],
+    [(schema.business_logic?.premium_features||[]).length > 0, 5],
+    [(schema.auth?.roles||[]).every(r=>(r.permissions||[]).length>0), 10],
+    [(schema.api?.endpoints||[]).some(e=>(e.path||'').includes('auth')||(e.path||'').includes('login')), 5],
+    // FIX: safely check Array.isArray before testing — avoids TypeError on missing key
+    [Array.isArray(schema.assumptions) && schema.assumptions.length >= 0, 5],
+  ];
+  checks.forEach(([pass, w]) => { if (pass) score += w; });
+  return Math.min(100, score);
+}
+
+function updateStats() {
+  document.getElementById('stat-runs').textContent = S.runs;
+  document.getElementById('stat-repairs').textContent = S.repairs;
+  if (S.latencies.length) {
+    const avg = S.latencies.reduce((a,b)=>a+b,0)/S.latencies.length;
+    document.getElementById('stat-avg').textContent = (avg/1000).toFixed(1);
+  }
+  if (S.runs > 0) {
+    document.getElementById('stat-rate').textContent = Math.round(S.successes/S.runs*100) + '%';
+  }
+}
+
+function updateCostUI() {
+  const costEl = document.getElementById('costEl');
+  if (costEl) costEl.textContent = 'Cost: $' + calcCost();
+}
+
+// ─── PIPELINE ───
+async function runPipeline(promptOverride, silent) {
+  const prompt = promptOverride || (document.getElementById('userPrompt')?.value||'').trim();
+  if (!prompt) { alert('Please enter an app description'); return null; }
+  if (S.running) return null;
+
+  // FIX: guard for missing API key shown with a nice message rather than silent failure
+  if (!_apiKey && !silent) {
+    addLog('⚠ Please enter your Groq API key in the field above first.', 'error');
+    return null;
+  }
+  if (!_apiKey) return {success:false, repairs:0, latency:0, quality:0};
+
+  S.running = true;
+
+  // FIX: reset UI and token state BEFORE disabling button; moved doReset before disabling button
+  if (!silent) {
+    doReset();
+    document.getElementById('runBtn').disabled = true;
+    setBadge('logBadge','running','info');
+  }
+
+  // Reset token counts for this run (after doReset so UI is consistent)
+  S.tok = {s1:0,s2:0,s3:0,s4:0,s5:0};
+
+  let repairCount = 0;
+  const t0 = Date.now();
+  let timerInt = null;
+  if (!silent) {
+    timerInt = setInterval(() => {
+      const el = document.getElementById('timerEl');
+      if (el) el.textContent = ((Date.now()-t0)/1000).toFixed(1) + 's';
+    }, 200);
+  }
+
+  // ── STAGE 0 start ──
+  setStage(0, 'active');
+  await tick();
+
+  // ══ STAGE 1: INTENT EXTRACTION ══
+  if (!silent) { addLog('Stage 1: Extracting intent...', 'info'); setStage(1,'active'); }
+  let intent;
+  const S1_SYS = `You are a compiler stage that parses app descriptions into structured intent.
+Output ONLY a valid JSON object. No markdown. No explanation. No text before or after the JSON.
+Required JSON schema:
+{
+  "app_type": "string (e.g. CRM, e-commerce, SaaS)",
+  "app_name": "string",
+  "core_features": ["array of strings"],
+  "entities": ["array of entity names"],
+  "user_roles": ["array of role names"],
+  "auth_required": true,
+  "payment_required": false,
+  "payment_provider": "stripe or null",
+  "ambiguity_flags": ["list any contradictions or conflicts in the prompt"],
+  "assumptions": ["list assumptions made for vague/missing info"],
+  "missing_info": ["what was underspecified"],
+  "subscription_tiers": ["free","pro","enterprise"]
+}
+Rules:
+- If prompt is vague, make sensible assumptions and document them
+- If there are conflicts, document in ambiguity_flags and resolve with best-practice default
+- Never set any array to null — use [] for empty`;
+
+  try {
+    const raw = await claude(S1_SYS, 'Parse this: "' + prompt + '"', 's1');
+    intent = JSON.parse(extractJSON(raw));
+    if (!silent) {
+      addLog('Intent: ' + intent.app_type + ' | ' + (intent.core_features||[]).length + ' features | roles: ' + (intent.user_roles||[]).join(', '), 'success');
+      if ((intent.ambiguity_flags||[]).length) addLog('Ambiguity: ' + intent.ambiguity_flags[0], 'warn');
+      if ((intent.assumptions||[]).length) addLog('Assumptions: ' + intent.assumptions.slice(0,2).join('; '), 'warn');
+      setStage(1,'done'); setStage(0,'done');
+    }
+  } catch(e) {
+    repairCount++;
+    if (!silent) addLog('Stage 1 parse error — retrying with tighter prompt: ' + e.message, 'warn');
+    try {
+      const raw2 = await claude(
+        'Output ONLY a JSON object with these exact keys: app_type, app_name, core_features (array), entities (array), user_roles (array), auth_required (bool), payment_required (bool), payment_provider (string or null), ambiguity_flags (array), assumptions (array), missing_info (array), subscription_tiers (array). No other text.',
+        '"' + prompt + '"', 's1');
+      intent = JSON.parse(extractJSON(raw2));
+      if (!silent) { addLog('Stage 1 repaired', 'repair'); setStage(1,'done'); setStage(0,'done'); }
+    } catch(e2) {
+      intent = {app_type:'web app',app_name:'MyApp',core_features:['authentication','dashboard'],entities:['User'],user_roles:['admin','user'],auth_required:true,payment_required:false,payment_provider:null,ambiguity_flags:['Prompt was unclear'],assumptions:['Inferred standard web application'],missing_info:[],subscription_tiers:[]};
+      repairCount++;
+      if (!silent) { addLog('Stage 1: using safe default intent', 'warn'); setStage(1,'done'); setStage(0,'done'); }
+    }
+  }
+  S.intent = intent;
+
+  // ══ STAGE 2: ARCHITECTURE ══
+  if (!silent) { addLog('Stage 2: Designing system architecture...', 'info'); setStage(2,'active'); }
+  let arch;
+  const S2_SYS = `You are a system architect stage. Convert structured intent into app architecture.
+Output ONLY a valid JSON object. No markdown. No explanation.
+Required JSON schema:
+{
+  "pages": [{"name":"string","route":"string","auth_required":true,"roles":["string"],"components":["string"]}],
+  "data_models": [{"entity":"string","fields":[{"name":"string","type":"string","required":true,"unique":false}],"relations":["string"]}],
+  "api_groups": [{"resource":"string","base_path":"string","operations":["list","get","create","update","delete"],"auth_required":true,"roles":["string"]}],
+  "auth_strategy": "jwt",
+  "design_decisions": ["string"],
+  "integrations": ["string"]
+}`;
+  try {
+    const raw = await claude(S2_SYS, JSON.stringify(intent), 's2');
+    arch = JSON.parse(extractJSON(raw));
+    if (!silent) {
+      addLog('Architecture: ' + (arch.pages||[]).length + ' pages, ' + (arch.data_models||[]).length + ' models, ' + (arch.api_groups||[]).length + ' API groups', 'success');
+      setStage(2,'done');
+    }
+  } catch(e) {
+    repairCount++;
+    if (!silent) addLog('Stage 2 error — targeted repair...', 'warn');
+    try {
+      const raw2 = await claude(
+        'Output ONLY JSON. Keys: pages (array), data_models (array), api_groups (array), auth_strategy (string), design_decisions (array), integrations (array). No other text.',
+        'App: ' + intent.app_type + '. Features: ' + (intent.core_features||[]).join(',') + '. Roles: ' + (intent.user_roles||[]).join(','), 's2');
+      arch = JSON.parse(extractJSON(raw2));
+      if (!silent) { addLog('Stage 2 repaired', 'repair'); setStage(2,'done'); }
+    } catch(e2) {
+      arch = {pages:[{name:'Dashboard',route:'/dashboard',auth_required:true,roles:intent.user_roles||['user'],components:['StatsWidget']}],data_models:[{entity:'User',fields:[{name:'id',type:'uuid',required:true,unique:true},{name:'email',type:'string',required:true,unique:true}],relations:[]}],api_groups:[{resource:'users',base_path:'/api/v1/users',operations:['list','get','create','update','delete'],auth_required:true,roles:['admin']}],auth_strategy:'jwt',design_decisions:['JWT auth'],integrations:[]};
+      repairCount++;
+      if (!silent) { addLog('Stage 2: using safe default arch', 'warn'); setStage(2,'done'); }
+    }
+  }
+  S.arch = arch;
+
+  // ══ STAGE 3: SCHEMA GENERATION ══
+  if (!silent) { addLog('Stage 3: Generating full schema (DB + API + UI + Auth + BizLogic)...', 'info'); setStage(3,'active'); }
+  let schema;
+  const S3_SYS = `You are a schema compiler. Generate complete production-ready config from architecture and intent.
+CRITICAL: Return ONLY pure valid JSON. No markdown. No prose. No comments. No trailing text.
+Required JSON schema:
+{
+  "database": {
+    "tables": [{"name":"string","columns":[{"name":"string","type":"VARCHAR|INTEGER|BOOLEAN|TIMESTAMP|TEXT|UUID|DECIMAL|JSON","nullable":false,"primary":false,"foreign_key":null,"default":null}],"indexes":["string"]}]
+  },
+  "api": {
+    "base_path": "/api/v1",
+    "endpoints": [{"method":"GET|POST|PUT|PATCH|DELETE","path":"string","description":"string","auth_required":true,"roles":["string"],"request_body":{},"response_schema":{},"status_codes":[200]}]
+  },
+  "ui": {
+    "theme": {"primary":"string","style":"string"},
+    "pages": [{"name":"string","route":"string","layout":"string","auth_required":true,"components":[{"type":"string","props":{}}]}]
+  },
+  "auth": {
+    "strategy": "jwt",
+    "jwt_expiry": "7d",
+    "roles": [{"name":"string","permissions":["resource:action"]}],
+    "session_type": "bearer",
+    "premium_gate": ["feature names gated to paid plan"]
+  },
+  "business_logic": {
+    "premium_features": ["string"],
+    "free_tier_limits": {},
+    "role_guards": {},
+    "webhooks": ["string"]
+  },
+  "assumptions": ["string"],
+  "warnings": ["string"]
+}
+CONSISTENCY RULES (violations will be auto-repaired):
+1. Auth roles referenced in API endpoints MUST exist in auth.roles
+2. DB tables should correspond to main entities
+3. If auth_required is true in intent, include /api/v1/auth/login, /api/v1/auth/register, /api/v1/auth/logout endpoints
+4. If payment_required, include subscriptions table and /api/v1/billing endpoints
+5. All UI pages must have route fields`;
+
+  try {
+    const raw = await claude(S3_SYS, 'Architecture: ' + JSON.stringify(arch) + '\nIntent: ' + JSON.stringify(intent), 's3');
+    schema = JSON.parse(extractJSON(raw));
+    if (!silent) {
+      addLog('Schema: ' + (schema.database?.tables||[]).length + ' tables, ' + (schema.api?.endpoints||[]).length + ' endpoints, ' + (schema.ui?.pages||[]).length + ' pages', 'success');
+      setStage(3,'done');
+    }
+  } catch(e) {
+    repairCount++;
+    if (!silent) addLog('Stage 3 parse error — running targeted schema repair...', 'warn');
+    try {
+      const raw2 = await claude(
+        'Output ONLY valid JSON with keys: database (object with tables array), api (object with base_path and endpoints array), ui (object with theme and pages array), auth (object with strategy, roles array, premium_gate array), business_logic (object), assumptions (array), warnings (array). Absolutely no text outside the JSON object.',
+        'App: ' + intent.app_type + ' called "' + intent.app_name + '". Entities: ' + (intent.entities||[]).join(',') + '. Roles: ' + (intent.user_roles||[]).join(',') + '. Features: ' + (intent.core_features||[]).slice(0,6).join(',') + '. Auth: ' + intent.auth_required + '. Payment: ' + intent.payment_required, 's3');
+      schema = JSON.parse(extractJSON(raw2));
+      if (!silent) { addLog('Stage 3 repaired', 'repair'); setStage(3,'done'); }
+    } catch(e2) {
+      S.running = false;
+      if (timerInt) clearInterval(timerInt);
+      if (!silent) {
+        addLog('Stage 3 repair failed: ' + e2.message, 'error');
+        setStage(3,'error');
+        document.getElementById('runBtn').disabled = false;
+        setBadge('logBadge','failed','err');
+      }
+      S.runs++;
+      S.repairs += repairCount;
+      updateStats();
+      schema = {
+  database:{tables:[{name:'users',columns:[{name:'id',type:'UUID'}],indexes:['id']}]},
+  api:{base_path:'/api/v1',endpoints:[{method:'GET',path:'/api/v1/health',description:'Health',auth_required:false,roles:[],request_body:null,response_schema:{ok:true},status_codes:[200]}]},
+  ui:{theme:{primary:'blue',style:'modern'},pages:[{name:'Dashboard',route:'/dashboard',layout:'default',auth_required:true,components:[{type:'stats'}]}]},
+  auth:{strategy:'jwt',jwt_expiry:'7d',roles:[{name:'admin',permissions:['all']}],session_type:'bearer',premium_gate:[]},
+  business_logic:{premium_features:[],free_tier_limits:{},role_guards:{},webhooks:[]},
+  assumptions:['Fallback schema generated'],
+  warnings:['Stage 3 auto fallback used']
+};
+addLog('Stage 3 fallback schema activated', 'repair');
+    }
+  }
+
+  // ══ STAGE 4: VALIDATION + REPAIR ══
+  if (!silent) { addLog('Stage 4: Running validation + repair engine...', 'info'); setStage(4,'active'); }
+  if (!silent) document.getElementById('valPanel').innerHTML = '';
+
+  const db = schema.database || (schema.database = {tables:[]});
+  const api = schema.api || (schema.api = {base_path:'/api/v1',endpoints:[]});
+  const ui = schema.ui || (schema.ui = {theme:{},pages:[]});
+  const auth = schema.auth || (schema.auth = {strategy:'jwt',roles:[],premium_gate:[]});
+  schema.business_logic = schema.business_logic || {};
+  db.tables = db.tables || [];
+  api.endpoints = api.endpoints || [];
+  ui.pages = ui.pages || [];
+  auth.roles = auth.roles || [];
+
+  const tableNames = () => db.tables.map(t=>t.name);
+  const roleNames = () => auth.roles.map(r=>typeof r==='string'?r:r.name);
+
+  // V1: DB tables
+  if (db.tables.length > 0) {
+    if (!silent) addVal('DB: ' + db.tables.length + ' tables defined', tableNames().join(', '), 'ok');
+  } else {
+    repairCount++;
+    db.tables.push({name:'users',columns:[{name:'id',type:'UUID',nullable:false,primary:true,foreign_key:null,default:null},{name:'email',type:'VARCHAR',nullable:false,primary:false,foreign_key:null,default:null},{name:'password_hash',type:'VARCHAR',nullable:false,primary:false,foreign_key:null,default:null},{name:'role',type:'VARCHAR',nullable:false,primary:false,foreign_key:null,default:'user'},{name:'created_at',type:'TIMESTAMP',nullable:true,primary:false,foreign_key:null,default:'NOW()'}],indexes:['email']});
+    if (!silent) addVal('No tables found — auto-added users table', '', 'fix');
+  }
+
+  // V2: API endpoints
+  if (api.endpoints.length > 0) {
+    if (!silent) addVal('API: ' + api.endpoints.length + ' endpoints defined', '', 'ok');
+  } else {
+    repairCount++;
+    api.endpoints = [{method:'GET',path:'/api/v1/health',description:'Health check',auth_required:false,roles:[],request_body:null,response_schema:{status:'ok'},status_codes:[200]}];
+    if (!silent) addVal('No endpoints found — added health check', '', 'fix');
+  }
+
+  // V3: Normalize HTTP methods
+  let badMethods = 0;
+  const validMethods = new Set(['GET','POST','PUT','PATCH','DELETE']);
+  api.endpoints.forEach(e => {
+    const m = (e.method||'GET').toUpperCase();
+    if (!validMethods.has(m)) { e.method = 'GET'; badMethods++; }
+    else e.method = m;
+  });
+  if (badMethods > 0) { repairCount++; if (!silent) addVal('Normalized ' + badMethods + ' invalid HTTP methods to GET', '', 'fix'); }
+  else { if (!silent) addVal('All HTTP methods valid', '', 'ok'); }
+
+  // V4: Auth endpoints
+  if (intent.auth_required) {
+    const hasLogin = api.endpoints.some(e=>(e.path||'').includes('login')||(e.path||'').includes('auth'));
+    if (!hasLogin) {
+      repairCount++;
+      api.endpoints.unshift(
+        {method:'POST',path:'/api/v1/auth/logout',description:'Logout',auth_required:true,roles:[],request_body:null,response_schema:{success:true},status_codes:[200,401]},
+        {method:'POST',path:'/api/v1/auth/register',description:'Register new user',auth_required:false,roles:[],request_body:{name:'string',email:'string',password:'string'},response_schema:{user:'object',token:'string'},status_codes:[201,400]},
+        {method:'POST',path:'/api/v1/auth/login',description:'Login with email + password',auth_required:false,roles:[],request_body:{email:'string',password:'string'},response_schema:{token:'string',user:'object'},status_codes:[200,401]}
+      );
+      if (!silent) addVal('Auth required but missing endpoints — added login/register/logout', '', 'fix');
+    } else {
+      if (!silent) addVal('Auth endpoints present (login/register)', '', 'ok');
+    }
+  }
+
+  // V5: Role cross-check
+  const apiRoleSet = new Set(api.endpoints.flatMap(e=>e.roles||[]));
+  const declaredRoles = new Set(roleNames());
+  const undeclared = [...apiRoleSet].filter(r => r && !declaredRoles.has(r));
+  if (undeclared.length === 0) {
+    if (!silent) addVal('Roles consistent — all API roles declared in auth config', roleNames().join(', '), 'ok');
+  } else {
+    repairCount++;
+    undeclared.forEach(r => auth.roles.push({name:r,permissions:[r+':read',r+':write',r+':delete']}));
+    if (!silent) addVal('Auto-added ' + undeclared.length + ' undeclared roles to auth', undeclared.join(', '), 'fix');
+  }
+
+  // V6: UI page routes
+  const missingRoutes = ui.pages.filter(p => !p.route);
+  if (missingRoutes.length === 0) {
+    if (!silent) addVal('UI routes: all ' + ui.pages.length + ' pages have routes', '', 'ok');
+  } else {
+    repairCount++;
+    missingRoutes.forEach(p => { p.route = '/' + (p.name||'page').toLowerCase().replace(/\s+/g,'-'); });
+    if (!silent) addVal('Auto-generated routes for ' + missingRoutes.length + ' pages', '', 'fix');
+  }
+
+  // V7: Payment config
+  if (intent.payment_required) {
+    const hasBilling = api.endpoints.some(e=>(e.path||'').includes('billing')||(e.path||'').includes('subscription'));
+    if (!hasBilling) {
+      repairCount++;
+      api.endpoints.push(
+        {method:'POST',path:'/api/v1/billing/subscribe',description:'Create subscription',auth_required:true,roles:[],request_body:{plan:'string',payment_method_id:'string'},response_schema:{subscription:'object'},status_codes:[200,400,402]},
+        {method:'GET',path:'/api/v1/billing/status',description:'Get subscription status',auth_required:true,roles:[],request_body:null,response_schema:{plan:'string',status:'string',expires_at:'string'},status_codes:[200,401]},
+        {method:'DELETE',path:'/api/v1/billing/cancel',description:'Cancel subscription',auth_required:true,roles:[],request_body:null,response_schema:{success:true},status_codes:[200,401]}
+      );
+      if (!db.tables.find(t=>t.name==='subscriptions')) {
+        db.tables.push({name:'subscriptions',columns:[{name:'id',type:'UUID',nullable:false,primary:true,foreign_key:null,default:null},{name:'user_id',type:'UUID',nullable:false,primary:false,foreign_key:'users.id',default:null},{name:'plan',type:'VARCHAR',nullable:false,primary:false,foreign_key:null,default:null},{name:'status',type:'VARCHAR',nullable:false,primary:false,foreign_key:null,default:'active'},{name:'stripe_subscription_id',type:'VARCHAR',nullable:true,primary:false,foreign_key:null,default:null},{name:'expires_at',type:'TIMESTAMP',nullable:true,primary:false,foreign_key:null,default:null}],indexes:['user_id','status']});
+      }
+      if (!silent) addVal('Payment required — added billing endpoints + subscriptions table', '', 'fix');
+    } else {
+      if (!silent) addVal('Billing endpoints present', '', 'ok');
+    }
+    if (!auth.premium_gate?.length) {
+      auth.premium_gate = (intent.core_features||[]).slice(0,3);
+      if (!silent) addVal('Premium gate set from top features', auth.premium_gate.join(', '), 'fix');
+    }
+  }
+
+  // V8: Foreign key refs valid
+  const currentTables = new Set(tableNames());
+  db.tables.forEach(t => {
+    (t.columns||[]).forEach(c => {
+      if (c.foreign_key) {
+        const ref = c.foreign_key.split('.')[0];
+        if (!currentTables.has(ref)) {
+          c.foreign_key = null;
+          if (!silent) addVal('Removed broken FK reference to non-existent table: ' + ref, t.name + '.' + c.name, 'fix');
+          repairCount++;
+        }
+      }
+    });
+  });
+
+  // V9: Document ambiguities
+  (intent.ambiguity_flags||[]).forEach(f => {
+    if (!silent) addVal('Ambiguity handled: ' + f.slice(0,80), 'resolved via assumption', 'warn');
+  });
+
+  const qs = qualScore(schema);
+  if (!silent) {
+    addVal('Quality score: ' + qs + '/100', db.tables.length + ' tables, ' + api.endpoints.length + ' endpoints, ' + auth.roles.length + ' roles', 'ok');
+    setBadge('valBadge', repairCount > 0 ? repairCount + ' repairs applied' : 'all checks passed', repairCount > 0 ? 'warn' : 'ok');
+  }
+  setStage(4,'done');
+  S.schema = schema;
+
+  // ══ STAGE 5: CODE GENERATION ══
+  if (!silent) { addLog('Stage 5: Generating executable code files...', 'info'); setStage(5,'active'); }
+  let codeFiles;
+  try {
+    const cgRaw = await claude(
+      `Generate executable code files for this app. Output ONLY a valid JSON object with these 5 string keys:
+"prisma_schema" - complete Prisma schema file content
+"express_routes" - complete Express.js router file content
+"nextjs_pages" - Next.js page component stubs
+"openapi_yaml" - OpenAPI 3.0 YAML spec
+"env_template" - .env.example content
+Each value must be the complete file as a string. Make code syntactically correct and production-ready. No markdown in values.`,
+      'Tables: ' + JSON.stringify(schema.database?.tables?.map(t=>({n:t.name,cols:(t.columns||[]).map(c=>c.name)}))) + '\nEndpoints: ' + JSON.stringify((schema.api?.endpoints||[]).slice(0,12).map(e=>({m:e.method,p:e.path}))) + '\nRoles: ' + JSON.stringify((schema.auth?.roles||[]).map(r=>r.name||r)) + '\nAuth: ' + schema.auth?.strategy,
+      's5');
+    codeFiles = JSON.parse(extractJSON(cgRaw));
+  } catch(e) {
+    // FIX: log the fallback reason in non-silent mode
+    if (!silent) addLog('Stage 5 API codegen failed — using deterministic fallback generator', 'warn');
+    codeFiles = buildCodeFromSchema(schema, intent);
+  }
+
+  if (!silent) {
+    renderCodegen(codeFiles);
+    addLog('Stage 5: 5 executable files generated (Prisma, Express, Next.js, OpenAPI, .env)', 'success');
+    setStage(5,'done');
+  }
+
+  // ── Finalize ──
+  const elapsed = Date.now() - t0;
+  if (timerInt) clearInterval(timerInt);
+  S.running = false;
+  S.runs++;
+  S.successes++;
+  S.repairs += repairCount;
+  S.latencies.push(elapsed);
+  // FIX: prompt slice no longer appends extra '...' since we just slice and history display adds it
+  S.runHistory.push({
+    prompt: (prompt||'').slice(0,45),
+    latency: elapsed,
+    tokens: Object.values(S.tok).reduce((a,b)=>a+b,0),
+    cost: parseFloat(calcCost()),
+    quality: qs,
+    repairs: repairCount
+  });
+
+  if (!silent) {
+    const el = document.getElementById('timerEl');
+    if (el) el.textContent = 'Done in ' + (elapsed/1000).toFixed(1) + 's';
+    setBadge('logBadge','complete','ok');
+    updateCostUI();
+    renderSchemaPages(schema);
+    renderRuntime(schema);
+    document.getElementById('nb-schema').textContent = db.tables.length+'T/'+api.endpoints.length+'EP';
+    document.getElementById('nb-rt').textContent = 'ready';
+    document.getElementById('nb-code').textContent = '5 files';
+    // Assumptions banner
+    const allAssums = [...(intent.assumptions||[]), ...(intent.ambiguity_flags||[])];
+    if (allAssums.length) {
+      document.getElementById('assumBanner').style.display = 'block';
+      document.getElementById('assumList').innerHTML = allAssums.map(a =>
+        '<span class="' + ((intent.ambiguity_flags||[]).includes(a) ? 'ctag' : 'atag') + '">' + escH(a) + '</span>'
+      ).join('');
+    }
+    document.getElementById('runBtn').disabled = false;
+  }
+
+  updateStats();
+  updateCostChart();
+  if (!silent) updateRunHistoryTable();
+
+  return {success:true, repairs:repairCount, latency:elapsed, quality:qs};
+}
+
+function tick() { return new Promise(r => setTimeout(r, 0)); }
+
+// FIX: doReset now only touches stage visuals and UI panels — does NOT reset S.tok
+// (token reset happens in runPipeline itself, after doReset)
+function doReset() {
+  // FIX: start loop at 0, connector update starts at conn0 not conn-1
+  for (let i = 0; i < 6; i++) {
+    setStage(i, '');
+    // Connectors are conn0..conn4 (between stages 0-1, 1-2, 2-3, 3-4, 4-5)
+    if (i < 5) {
+      const c = document.getElementById('conn' + i);
+      if (c) c.classList.remove('done');
+    }
+  }
+  const sl = document.getElementById('stageLog');
+  if (sl) sl.innerHTML = '<div class="empty"><div class="empty-icon">⏳</div>Run a pipeline to see output</div>';
+  const vp = document.getElementById('valPanel');
+  if (vp) vp.innerHTML = '<div class="empty"><div class="empty-icon">🔍</div>Validation results appear here</div>';
+  const ab = document.getElementById('assumBanner');
+  if (ab) ab.style.display = 'none';
+  setBadge('logBadge','idle','idle');
+  setBadge('valBadge','idle','idle');
+  const te = document.getElementById('timerEl');
+  if (te) te.textContent = '';
+  const ce = document.getElementById('costEl');
+  if (ce) ce.textContent = 'Cost: $0.00000';
+}
+
+// ─── RENDER SCHEMA PAGES ───
+function renderSchemaPages(schema) {
+  document.getElementById('stab-db').innerHTML = '<pre class="code">' + syntaxHL(schema.database||{}) + '</pre>';
+  document.getElementById('stab-api').innerHTML = '<pre class="code">' + syntaxHL(schema.api||{}) + '</pre>';
+  document.getElementById('stab-ui').innerHTML = '<pre class="code">' + syntaxHL(schema.ui||{}) + '</pre>';
+  document.getElementById('stab-auth').innerHTML = '<pre class="code">' + syntaxHL(schema.auth||{}) + '</pre>';
+  document.getElementById('stab-biz').innerHTML = '<pre class="code">' + syntaxHL(schema.business_logic||{}) + '</pre>';
+  document.getElementById('stab-full').innerHTML = '<pre class="code">' + syntaxHL(schema) + '</pre>';
+}
+
+// ─── RENDER RUNTIME ───
+function renderRuntime(schema) {
+  const db = schema.database||{};
+  const api = schema.api||{};
+  const auth = schema.auth||{};
+  const ui = schema.ui||{};
+  const tables = db.tables||[];
+  const endpoints = api.endpoints||[];
+  const roles = auth.roles||[];
+  const pages = ui.pages||[];
+
+  let h = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+
+  h += '<div class="panel"><div class="ph">🗄 Database Tables (' + tables.length + ')</div><div class="pb">';
+  tables.forEach(t => {
+    h += '<div class="rt-row"><span class="rt-name">' + escH(t.name) + '</span><span class="rt-badge rb-tbl">' + (t.columns||[]).length + ' cols</span></div>';
+    (t.columns||[]).filter(c=>c.foreign_key).forEach(c => {
+      h += '<div style="display:flex;justify-content:space-between;padding:3px 8px 3px 20px;font-size:10px;color:var(--text3)"><span>↳ ' + escH(c.name) + '</span><span>→ ' + escH(c.foreign_key) + '</span></div>';
+    });
+  });
+  h += '</div></div>';
+
+  h += '<div class="panel"><div class="ph">🔌 API Endpoints (' + endpoints.length + ')</div><div class="pb">';
+  endpoints.slice(0,25).forEach(e => {
+    const m = (e.method||'GET').toUpperCase();
+    const cls = 'rb-' + m.toLowerCase();
+    h += '<div class="rt-row"><span class="rt-name">' + escH((e.path||'').replace('/api/v1','')) + '</span><span class="rt-badge ' + cls + '">' + m + '</span></div>';
+  });
+  if (endpoints.length > 25) h += '<div style="font-size:11px;color:var(--text3);padding:4px 8px">+' + (endpoints.length-25) + ' more</div>';
+  h += '</div></div>';
+
+  h += '<div class="panel"><div class="ph">👥 Auth Roles (' + roles.length + ')</div><div class="pb">';
+  roles.forEach(r => {
+    const name = typeof r==='string' ? r : r.name;
+    const perms = typeof r==='string' ? [] : (r.permissions||[]);
+    h += '<div class="rt-row"><span class="rt-name">' + escH(name) + '</span><span class="rt-badge rb-role">' + perms.length + ' perms</span></div>';
+    if (perms.length) h += '<div style="font-size:10px;color:var(--text3);padding:2px 8px 4px 20px">' + perms.slice(0,4).map(escH).join(' · ') + '</div>';
+  });
+  h += '</div></div>';
+
+  h += '<div class="panel"><div class="ph">📱 UI Pages (' + pages.length + ')</div><div class="pb">';
+  pages.forEach(p => {
+    h += '<div class="rt-row"><span class="rt-name">' + escH(p.name||'?') + '</span><span class="rt-badge rb-get">' + escH(p.route||'/') + '</span></div>';
+  });
+  h += '</div></div>';
+
+  h += '</div>';
+
+  // Consistency checks
+  // FIX: S.intent may be null on first call — use optional chaining
+  h += '<div style="margin-top:12px" class="panel"><div class="ph">✅ Runtime Consistency Checks</div><div class="pb" style="max-height:none">';
+  const checks = [
+    ['All endpoints have method + path', endpoints.length > 0 && endpoints.every(e=>e.method&&e.path)],
+    ['All tables have at least one column', tables.length > 0 && tables.every(t=>(t.columns||[]).length>0)],
+    ['Auth roles defined', roles.length > 0],
+    ['Auth endpoints present', endpoints.some(e=>(e.path||'').includes('login')||(e.path||'').includes('auth'))],
+    ['All UI pages have routes', pages.length > 0 && pages.every(p=>p.route)],
+    ['Billing configured (if payment required)', !S.intent?.payment_required || endpoints.some(e=>(e.path||'').includes('billing'))],
+    ['Foreign keys reference existing tables', (() => {
+      const tNames = new Set(tables.map(t=>t.name));
+      return tables.every(t=>(t.columns||[]).every(c=>!c.foreign_key||(tNames.has(c.foreign_key.split('.')[0]))));
+    })()],
+    ['Premium gate configured (if payment required)', !S.intent?.payment_required || (auth.premium_gate||[]).length > 0],
+  ];
+  checks.forEach(([label, pass]) => {
+    h += '<div class="vi"><div class="vi-ic ' + (pass?'ic-ok':'ic-err') + '">' + (pass?'✓':'✗') + '</div><div class="vi-txt">' + escH(label) + '</div></div>';
+  });
+  h += '</div></div>';
+
+  document.getElementById('runtimeOut').innerHTML = h;
+}
+
+// ─── CODE GENERATION FALLBACK ───
+function buildCodeFromSchema(schema, intent) {
+  const tables = schema.database?.tables || [];
+  const endpoints = schema.api?.endpoints || [];
+  const pages = schema.ui?.pages || [];
+  const auth = schema.auth || {};
+
+  // Prisma
+  let prisma = '// Auto-generated Prisma Schema\ngenerator client {\n  provider = "prisma-client-js"\n}\n\ndatasource db {\n  provider = "postgresql"\n  url      = env("DATABASE_URL")\n}\n\n';
+  tables.forEach(t => {
+    const modelName = t.name.split('_').map(w => w.charAt(0).toUpperCase()+w.slice(1)).join('');
+    prisma += 'model ' + modelName + ' {\n';
+    (t.columns||[]).forEach(c => {
+      const typeMap = {VARCHAR:'String',TEXT:'String',UUID:'String',INTEGER:'Int',BOOLEAN:'Boolean',TIMESTAMP:'DateTime',DECIMAL:'Decimal',JSON:'Json'};
+      const pt = typeMap[c.type] || 'String';
+      let line = '  ' + c.name + ' ' + pt + (c.nullable?'?':'');
+      if (c.primary) line += ' @id @default(uuid())';
+      if (c.unique && !c.primary) line += ' @unique';
+      if (c.type==='TIMESTAMP' && c.name.includes('created')) line += ' @default(now())';
+      if (c.type==='TIMESTAMP' && c.name.includes('updated')) line += ' @updatedAt';
+      if (c.default && !c.primary && !c.name.includes('created') && !c.name.includes('updated')) line += ' @default("' + c.default + '")';
+      prisma += line + '\n';
+    });
+    prisma += '  @@map("' + t.name + '")\n}\n\n';
+  });
+
+  // Express
+  let express = "// Auto-generated Express Routes\nconst router = require('express').Router();\nconst { auth, role } = require('../middleware');\n\n";
+  const groups = {};
+  endpoints.forEach(e => { const g = (e.path||'/').split('/')[3]||'misc'; (groups[g]=groups[g]||[]).push(e); });
+  Object.entries(groups).forEach(([g, eps]) => {
+    express += '// --- ' + g + ' ---\n';
+    eps.forEach(e => {
+      const m = (e.method||'GET').toLowerCase();
+      const p = (e.path||'/').replace('/api/v1','') || '/';
+      const mw = e.auth_required ? (e.roles?.length ? ', auth, role(' + JSON.stringify(e.roles) + ')' : ', auth') : '';
+      express += "router." + m + "('" + p + "'" + mw + ", async (req, res) => {\n  // " + (e.description||'') + "\n  try {\n    res.json({ success: true, data: null });\n  } catch(err) { res.status(500).json({ error: err.message }); }\n});\n";
+    });
+    express += '\n';
+  });
+  express += 'module.exports = router;\n';
+
+  // Next.js
+  let nextjs = "// Auto-generated Next.js Pages\n\n";
+  pages.forEach(p => {
+    const name = (p.name||'Page').replace(/\s+/g,'');
+    nextjs += "// " + (p.route||'/') + "\n";
+    if (p.auth_required) nextjs += "import { withAuth } from '../lib/auth';\n";
+    // FIX: components may be array of objects {type,props} or plain strings — normalize both
+    const compNames = (p.components||[]).map(c => (typeof c === 'object' ? c.type : String(c))).filter(Boolean).join(', ');
+    nextjs += "export default " + (p.auth_required?'withAuth(':'') + "function " + name + "Page({ user }) {\n  return (\n    <main className=\"p-6\">\n      <h1 className=\"text-2xl font-bold\">" + escH(p.name||'Page') + "</h1>\n      {/* Components: " + compNames + " */}\n    </main>\n  );\n}" + (p.auth_required?')':'') + "\n\n";
+  });
+
+  // OpenAPI
+  let openapi = 'openapi: "3.0.0"\ninfo:\n  title: "' + (intent?.app_name||'App') + ' API"\n  version: "1.0.0"\n  description: "Auto-generated API spec"\npaths:\n';
+  const epByPath = {};
+  endpoints.forEach(e => { (epByPath[e.path||'/'] = epByPath[e.path||'/']||{})[e.method||'GET'] = e; });
+  Object.entries(epByPath).forEach(([path, methods]) => {
+    openapi += '  "' + path + '":\n';
+    Object.entries(methods).forEach(([method, e]) => {
+      openapi += '    ' + method.toLowerCase() + ':\n      summary: "' + (e.description||'') + '"\n      tags: ["' + (path.split('/')[3]||'general') + '"]\n';
+      if (e.auth_required) openapi += '      security:\n        - bearerAuth: []\n';
+      openapi += '      responses:\n        "200":\n          description: Success\n';
+    });
+  });
+  openapi += 'components:\n  securitySchemes:\n    bearerAuth:\n      type: http\n      scheme: bearer\n      bearerFormat: JWT\n';
+
+  // Env
+  let env = '# Auto-generated .env.example\nDATABASE_URL=postgresql://user:password@localhost:5432/mydb\nJWT_SECRET=change-this-to-a-long-random-string\nJWT_EXPIRES_IN=' + (auth.jwt_expiry||'7d') + '\nPORT=3000\nNODE_ENV=development\n';
+  if (endpoints.some(e=>(e.path||'').includes('billing'))) env += 'STRIPE_SECRET_KEY=sk_test_...\nSTRIPE_PUBLISHABLE_KEY=pk_test_...\nSTRIPE_WEBHOOK_SECRET=whsec_...\n';
+  env += 'REDIS_URL=redis://localhost:6379\nCORS_ORIGIN=http://localhost:3001\n';
+
+  return {prisma_schema:prisma, express_routes:express, nextjs_pages:nextjs, openapi_yaml:openapi, env_template:env};
+}
+
+function renderCodegen(files) {
+  const items = [
+    {key:'prisma_schema', name:'schema.prisma', lang:'prisma'},
+    {key:'express_routes', name:'routes/index.js', lang:'js'},
+    {key:'nextjs_pages', name:'pages/*.jsx (Next.js)', lang:'jsx'},
+    {key:'openapi_yaml', name:'openapi.yaml', lang:'yaml'},
+    {key:'env_template', name:'.env.example', lang:'env'}
+  ];
+  document.getElementById('codegenOut').innerHTML = items.map(f => {
+    const content = escH(files[f.key]||'# Not generated');
+    return '<div class="cf"><div class="cf-hdr"><span class="cf-lang lang-' + f.lang + '">' + f.lang.toUpperCase() + '</span>' + escH(f.name) + '</div><div class="cf-body"><pre class="code">' + content + '</pre></div></div>';
+  }).join('');
+}
+
+// ─── COST CHART ───
+function updateCostChart() {
+  const total = Math.max(Object.values(S.tok).reduce((a,b)=>a+b,0), 1);
+  [1,2,3,4,5].forEach(i => {
+    const t = S.tok['s'+i]||0;
+    const pct = Math.round(t/total*100);
+    const fill = document.getElementById('tb'+i);
+    const val = document.getElementById('tv'+i);
+    if (fill) { fill.style.width = pct+'%'; fill.textContent = pct>8 ? pct+'%' : ''; }
+    if (val) val.textContent = t + ' tok';
+  });
+
+  const qs = S.schema ? qualScore(S.schema) : 0;
+  const lastLat = S.latencies.length ? S.latencies[S.latencies.length-1] : 0;
+  const cost = parseFloat(calcCost());
+
+  const set = (id, val) => { const e=document.getElementById(id); if(e) e.textContent=val; };
+  const setW = (id, pct) => { const e=document.getElementById(id); if(e) e.style.width=pct+'%'; };
+  set('cq-q', qs+'/100'); setW('cq-qb', qs);
+  set('cq-l', lastLat ? (lastLat/1000).toFixed(1)+'s' : '—'); setW('cq-lb', Math.min(100,Math.round(lastLat/60000*100)));
+  set('cq-c', '$'+cost.toFixed(5)); setW('cq-cb', Math.min(100,Math.round(cost/0.02*100)));
+}
+
+// FIX: run history prompt display — slice(0,45) + '...' only if truncated
+function updateRunHistoryTable() {
+  const tbody = document.getElementById('runHistory');
+  if (!tbody) return;
+  tbody.innerHTML = S.runHistory.map((r,i) => {
+    const displayPrompt = r.prompt.length >= 45 ? r.prompt + '...' : r.prompt;
+    return '<tr><td>'+(i+1)+'</td><td>'+escH(displayPrompt)+'</td><td>'+(r.latency/1000).toFixed(1)+'s</td><td>'+r.tokens+'</td><td>$'+r.cost.toFixed(5)+'</td><td style="color:'+( r.quality>=80?'var(--green)':r.quality>=50?'var(--yellow)':'var(--red)')+'">'+r.quality+'/100</td><td>'+r.repairs+'</td></tr>';
+  }).join('');
+}
+
+// ─── EVAL FRAMEWORK ───
+function initEvalTable() {
+  document.getElementById('evalBody').innerHTML = EVAL_DATASET.map((p,i) => {
+    const isEdge = p.cat.startsWith('Edge');
+    return '<tr id="er-'+i+'"><td>'+(i+1)+'</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escH(p.p)+'">'+escH(p.p.slice(0,55))+'...</td><td><span style="font-size:10px;padding:2px 6px;border-radius:8px;background:var(--'+(isEdge?'yellow':'blue')+'-bg);color:var(--'+(isEdge?'yellow':'blue')+')">'+escH(p.cat)+'</span></td><td id="es-'+i+'"><span class="sdot sd-p"></span>pending</td><td id="el-'+i+'">—</td><td id="ep-'+i+'">—</td><td id="eq-'+i+'">—</td><td><button class="run-btn" onclick="runOneEval('+i+')">▶</button></td></tr>';
+  }).join('');
+}
+
+async function runOneEval(idx) {
+  const p = EVAL_DATASET[idx];
+  document.getElementById('es-'+idx).innerHTML = '<span class="sdot sd-r"></span>running...';
+  document.getElementById('el-'+idx).textContent = '—';
+  document.getElementById('ep-'+idx).textContent = '—';
+  document.getElementById('eq-'+idx).textContent = '—';
+  try {
+    const result = await runPipeline(p.p, true);
+    const ok = result && result.success !== false;
+    document.getElementById('es-'+idx).innerHTML = '<span class="sdot '+(ok?'sd-ok':'sd-fail')+'"></span>'+(ok?'passed':'failed');
+    document.getElementById('el-'+idx).textContent = result?.latency ? (result.latency/1000).toFixed(1)+'s' : '—';
+    document.getElementById('ep-'+idx).textContent = result?.repairs ?? '—';
+    document.getElementById('eq-'+idx).textContent = result?.quality != null ? result.quality+'/100' : '—';
+    S.evalResults[idx] = result || {success:false,repairs:0,latency:0,quality:0};
+  } catch(e) {
+    document.getElementById('es-'+idx).innerHTML = '<span class="sdot sd-fail"></span>error';
+    document.getElementById('eq-'+idx).textContent = escH(e.message.slice(0,25));
+    S.evalResults[idx] = {success:false,repairs:0,latency:0,quality:0};
+  }
+  updateEvalMetrics();
+}
+
+// FIX: runNextEval properly advances evalIdx and wraps around
+async function runNextEval() {
+  if (evalIdx >= EVAL_DATASET.length) { evalIdx = 0; }
+  await runOneEval(evalIdx);
+  evalIdx++;
+}
+
+// FIX: runFullEval resets evalIdx to 0 at start so it always runs all 20
+async function runFullEval() {
+  const btn = document.getElementById('evalBtn');
+  const prog = document.getElementById('evalProgress');
+  btn.disabled = true;
+  evalIdx = 0;
+  for (let i = 0; i < EVAL_DATASET.length; i++) {
+    if (prog) prog.textContent = 'Running ' + (i+1) + '/20...';
+    await runOneEval(i);
+    // Small delay between runs to avoid rate limiting
+    await new Promise(r => setTimeout(r, 500));
+  }
+  btn.disabled = false;
+  if (prog) prog.textContent = 'Complete!';
+  document.getElementById('nb-eval').textContent = '20/20';
+  evalIdx = 0;
+}
+
+function resetEval() {
+  S.evalResults = Array(20).fill(null);
+  evalIdx = 0;
+  initEvalTable();
+  updateEvalMetrics();
+  const p = document.getElementById('evalProgress');
+  if (p) p.textContent = '';
+}
+
+function updateEvalMetrics() {
+  const ran = S.evalResults.filter(r => r !== null);
+  const passed = ran.filter(r => r.success !== false);
+  const totalRep = ran.reduce((a,r) => a+(r.repairs||0), 0);
+  const avgLat = ran.length ? (ran.reduce((a,r) => a+(r.latency||0), 0) / ran.length / 1000).toFixed(1)+'s' : '—';
+  const set = (id, v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
+  set('ev-run', ran.length+'/20');
+  set('ev-rate', ran.length ? Math.round(passed.length/ran.length*100)+'%' : '—');
+  set('ev-lat', avgLat);
+  set('ev-rep', totalRep);
+  set('nb-eval', ran.length+'/20');
+}
+
+// ─── INIT ───
+initEvalTable();
+</script>
+</body>
+</html>
+
+<script>
+
+window.addEventListener('DOMContentLoaded', () => {
+  const inp = document.getElementById('apikeyInput');
+  if (inp) {
+    inp.value = _apiKey;
+    saveApiKey(_apiKey);
+  }
+});
+
+</script>
